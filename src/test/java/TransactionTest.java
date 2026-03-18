@@ -35,4 +35,20 @@ public class TransactionTest extends BaseTest {
                 .body("data.access_code", notNullValue())
                 .body("data.reference", notNullValue());
     }
+    @Test
+    public void TC04_shouldReturnSuccessStatusAfterPaymentCompleted() {
+        // Using a reference from a previously completed sandbox payment
+        String completedReference = "hgkc6ese08";
+
+        given()
+                .header("Authorization", "Bearer " + SECRET_KEY)
+                .when()
+                .get("/transaction/verify/" + completedReference)
+                .then()
+                .statusCode(200)
+                .body("data.status", equalTo("success"))
+                .body("data.gateway_response", equalTo("Approved"))
+                .body("data.amount", equalTo(100))
+                .body("data.currency", equalTo("KES"));
+    }
 }

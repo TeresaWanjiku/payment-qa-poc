@@ -113,4 +113,63 @@ public class TransactionTest extends BaseTest {
                 .body("status", equalTo(false))
                 .body("message", notNullValue());
     }
+    @Test
+    public void TC10_shouldReturnErrorOnDuplicateReference() {
+        String duplicateReference = "duplicate-ref-" + System.currentTimeMillis();
+        String body = "{\"email\": \"test@example.com\", \"amount\": \"10000\", \"reference\": \"" + duplicateReference + "\"}";
+
+        // First request — should succeed
+        given()
+                .header("Authorization", "Bearer " + SECRET_KEY)
+                .contentType(ContentType.JSON)
+                .body(body)
+                .when()
+                .post("/transaction/initialize")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo(true));
+
+        // Second request with same reference — should fail
+        given()
+                .header("Authorization", "Bearer " + SECRET_KEY)
+                .contentType(ContentType.JSON)
+                .body(body)
+                .when()
+                .post("/transaction/initialize")
+                .then()
+                .statusCode(400)
+                .body("status", equalTo(false));
+    }
+    @Test
+    public void TC11_shouldReturnErrorOnNonExistentReference() {
+        given()
+                .header("Authorization", "Bearer " + SECRET_KEY)
+                .when()
+                .get("/transaction/verify/fake-ref-123")
+                .then()
+                .statusCode(400)
+                .body("status", equalTo(false))
+                .body("message", notNullValue());
+    }
+    @Test
+    public void TC12_shouldReturnOnlySuccessfulTransactionsWhenFilteredByStatus() {
+        // Fetch transactions filtered by status=success
+        io.restassured.response.Response response =
+                given()
+                        .header("Authorization", "Bearer " + SECRET_KEY)
+                        .queryParam("status", "success")
+                        .when()
+                        .get("/transaction")
+                        .then()
+                        .statusCode(200)
+                        .body("status", equalTo(true))
+                        .extract().response();
+
+        // Assert no abandoned transactions in the filtered results
+        java.util.List<String> statuses = response.jsonPath().getList("data.status");
+        for (String status : statuses) {
+            org.testng.Assert.assertEquals(status, "success",
+                    "Expected only success transactions but found: " + status);
+        }
+    }
 }

@@ -1,0 +1,19 @@
+[
+  {
+    "received_at": "2026-05-07T13:32:20.315512",
+    "event": "charge.success",
+    "reference": "t8fv1bvrau",
+    "amount": 10000,
+    "currency": "KES",
+    "status": "success",
+    "raw": {
+      "event": "charge.success",
+      "data": {
+        "amount": 10000,
+        "currency": "KES",
+        "status": "success",
+        "reference": "t8fv1bvrau"
+      }
+    }
+  }
+]

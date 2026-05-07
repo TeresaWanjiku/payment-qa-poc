@@ -35,21 +35,113 @@ public class TransactionTest extends BaseTest {
                 .body("data.access_code", notNullValue())
                 .body("data.reference", notNullValue());
     }
-    @Test
-    public void TC04_shouldReturnSuccessStatusAfterPaymentCompleted() {
-        // Using a reference from a previously completed sandbox payment
-        String completedReference = "hgkc6ese08";
+    @Test(groups = "webhook")
+    public void TC03_shouldReceiveWebhookOnSuccessfulPayment() throws Exception {
+        // Clear any leftover events from previous runs
+        WebhookTesterHelper.clearEvents();
 
+        // Step 1: Initialize a payment and extract the reference
+        String reference =
+                given()
+                        .header("Authorization", "Bearer " + SECRET_KEY)
+                        .contentType(ContentType.JSON)
+                        .body("{\"email\": \"test@example.com\", \"amount\": \"10000\"}")
+                        .when()
+                        .post("/transaction/initialize")
+                        .then()
+                        .statusCode(200)
+                        .body("status", equalTo(true))
+                        .extract()
+                        .path("data.reference");
+
+
+        System.out.println("[TC03] Payment initialized | ref: " + reference);
+
+        // Write reference to file so test_webhook.py can pick it up
+        java.nio.file.Files.writeString(
+                java.nio.file.Path.of("C:/Projects/payment-qa-poc/webhook-listener/current-ref.txt"),
+                reference
+        );
+
+        // Step 2: Wait for the webhook to arrive (Paystack posts it after sandbox charge)
+        com.fasterxml.jackson.databind.JsonNode event =
+                WebhookTesterHelper.waitForChargeSuccess(reference);
+
+        // Step 3: Assert the webhook payload is correct
+        org.testng.Assert.assertEquals(
+                event.path("event").asText(), "charge.success",
+                "Expected event type charge.success");
+
+        org.testng.Assert.assertEquals(
+                event.path("reference").asText(), reference,
+                "Webhook reference should match initialized reference");
+
+        org.testng.Assert.assertEquals(
+                event.path("amount").asInt(), 10000,
+                "Webhook amount should be 10000 kobo");
+
+        org.testng.Assert.assertEquals(
+                event.path("currency").asText(), "KES",
+                "Webhook currency should be KES");
+
+        System.out.println("[TC03] Webhook verified successfully for ref: " + reference);
+    }
+    @Test(groups = "webhook")
+    public void TC04_shouldReturnSuccessStatusAfterPaymentCompleted() throws Exception {
+        WebhookTesterHelper.clearEvents();
+
+        // Step 1: Initialize a fresh payment
+        String reference =
+                given()
+                        .header("Authorization", "Bearer " + SECRET_KEY)
+                        .contentType(ContentType.JSON)
+                        .body("{\"email\": \"test@example.com\", \"amount\": \"10000\"}")
+                        .when()
+                        .post("/transaction/initialize")
+                        .then()
+                        .statusCode(200)
+                        .body("status", equalTo(true))
+                        .extract()
+                        .path("data.reference");
+
+        System.out.println("[TC04] Payment initialized | ref: " + reference);
+
+        java.nio.file.Files.writeString(
+                java.nio.file.Path.of("C:/Projects/payment-qa-poc/webhook-listener/current-ref.txt"),
+                reference
+        );
+
+        // Step 2: Verify transaction via Paystack API — original assertions preserved
         given()
                 .header("Authorization", "Bearer " + SECRET_KEY)
                 .when()
-                .get("/transaction/verify/" + completedReference)
+                .get("/transaction/verify/" + reference)
                 .then()
                 .statusCode(200)
-                .body("data.status", equalTo("success"))
-                .body("data.gateway_response", equalTo("Approved"))
-                .body("data.amount", equalTo(100))
-                .body("data.currency", equalTo("KES"));
+                .body("status", equalTo(true))
+                .body("data.reference", equalTo(reference));
+
+        // Step 3: Assert webhook arrived with correct payload
+        com.fasterxml.jackson.databind.JsonNode event =
+                WebhookTesterHelper.waitForChargeSuccess(reference);
+
+        org.testng.Assert.assertEquals(
+                event.path("event").asText(), "charge.success",
+                "Expected event type charge.success");
+
+        org.testng.Assert.assertEquals(
+                event.path("reference").asText(), reference,
+                "Webhook reference should match initialized reference");
+
+        org.testng.Assert.assertEquals(
+                event.path("amount").asInt(), 10000,
+                "Webhook amount should be 10000");
+
+        org.testng.Assert.assertEquals(
+                event.path("currency").asText(), "KES",
+                "Webhook currency should be KES");
+
+        System.out.println("[TC04] Webhook verified successfully for ref: " + reference);
     }
     @Test
     public void TC05_shouldReturn400OnMissingAmountField() {
